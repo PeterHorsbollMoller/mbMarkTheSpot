@@ -1,0 +1,510 @@
+'*******************************************************************************
+'** 	Created By Peter Horsbøll Møller, Pitney Bowes
+'** 	Program:
+'** 	Modul:
+'**
+'*******************************************************************************
+
+'-------------------------------------
+Include "MapBasic.def"
+Include "Icons.def"
+Include "Menu.def"
+'**default constants...
+Include "Library\Defaults.def"
+
+'-------------------------------------
+Include "Library\DEBUGLib.def"
+Include "Library\ERRORLib.def"
+Include "Library\STRINGLib.def"
+Include "Library\TABLELib.def"
+
+Include "DLGMarkTheSpot.def"
+
+Declare Sub DLGMTS_Handler_OnLoad
+Declare Sub DLGMTS_Handler_OKClicked
+Declare Sub DLGMTS_Handler_UseZoomClicked
+Declare Sub DLGMTS_Handler_UseMarkerClicked
+
+Define	CTRL_TXT_COORDINATES	100
+Define	CTRL_CHK_USE_MARKER		200
+Define	CTRL_SYM_MARKER		210
+Define	CTRL_CHK_USE_ZOOM		300
+Define	CTRL_TXT_ZOOM			310
+Define	CTRL_LST_LATLONG_ORDER	400
+
+Dim	msymMarker As Symbol,
+	mnLatLongOrder As Integer,
+	mbUseMarkerSymbol, mbUseZoom As Logical,
+	mfCoordinateX, mfCoordinateY, mfZoom As Float,
+	msDistanceUnits As String
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMarkTheSpot() As Logical
+
+Dim	sCoordinates As String
+
+OnError GoTo ErrorOccured
+
+DLGMarkTheSpot = FALSE
+
+	Set CoordSys Earth Projection 1, 104
+	If DLGMTSGetLatLongOrder() = COORD_ORDER_LATLONG Then
+		sCoordinates = MapperInfo(FrontWindow(), MAPPER_INFO_CENTERY) & " " & MapperInfo(FrontWindow(), MAPPER_INFO_CENTERX)
+	Else
+		sCoordinates = MapperInfo(FrontWindow(), MAPPER_INFO_CENTERX) & " " & MapperInfo(FrontWindow(), MAPPER_INFO_CENTERY)
+	End If
+
+	Dialog
+		Title "Mark the Spot"
+		Calling DLGMTS_Handler_OnLoad
+
+		Control StaticText		Position 5,5
+			Title "Enter Coordinate - Lat/Long WGS84"
+		Control EditText		Position 5,15			ID CTRL_TXT_COORDINATES
+			Width 200
+			Value sCoordinates
+
+		Control CheckBox		Position 5,35			ID CTRL_CHK_USE_MARKER
+			Title "Symbol"
+			Calling DLGMTS_Handler_UseMarkerClicked
+			Value DLGMTSUseMarkerSymbol()
+		Control SymbolPicker	Position 5,45			ID CTRL_SYM_MARKER
+			Width 20	Height 20
+			Value DLGMTSGetMarkerSymbol()
+
+		Control RadioGroup		Position 50,35			ID CTRL_LST_LATLONG_ORDER
+			Title "Lat/Long;Long/Lat"
+			Value DLGMTSGetLatLongOrder()
+
+		Control CheckBox		Position 105,35			ID CTRL_CHK_USE_ZOOM
+			Title "Zoom, " & DLGMTSGetDistanceUnits()
+			Calling DLGMTS_Handler_UseZoomClicked
+			Value DLGMTSUseZoom()
+		Control EditText		Position 105,47			ID CTRL_TXT_ZOOM
+			Width 50
+			Value FormatNumber$(DLGMTSGetZoom())
+
+		Control OKButton		Position 165,45
+			Calling DLGMTS_Handler_OKClicked
+		Control CancelButton	Position 165,60
+
+	If not CommandInfo(CMD_INFO_DLG_OK) Then
+		Exit Function
+	End If
+
+DLGMarkTheSpot = TRUE
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMarkTheSpot")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_Handler_OnLoad
+
+OnError GoTo ErrorOccured
+
+	Call DLGMTS_Handler_UseZoomClicked
+	Call DLGMTS_Handler_UseMarkerClicked
+	Alter Control CTRL_TXT_COORDINATES Active
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_Handler_OnLoad")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_Handler_UseZoomClicked
+
+OnError GoTo ErrorOccured
+
+	If ReadControlValue(CTRL_CHK_USE_ZOOM) Then
+		Alter Control CTRL_TXT_ZOOM Enable
+	Else
+		Alter Control CTRL_TXT_ZOOM Disable
+	End If
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_Handler_UseZoomClicked")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_Handler_UseMarkerClicked
+
+OnError GoTo ErrorOccured
+
+	If ReadControlValue(CTRL_CHK_USE_MARKER) Then
+		Alter Control CTRL_SYM_MARKER Enable
+	Else
+		Alter Control CTRL_SYM_MARKER Disable
+	End If
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_Handler_UseMarkerClicked")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_Handler_OKClicked
+
+Dim	sZoom, sCoordinates, arrSeparators(), arrParts() As String,
+	i, nSeparator, nNumParts, nOrder As Integer
+
+OnError GoTo ErrorOccured
+
+	sCoordinates		= ReadControlValue(CTRL_TXT_COORDINATES)
+	If sCoordinates = "" Then
+		Note "Please enter a coordinate pair into the coordinate field"
+		Dialog Preserve
+		Exit Sub
+	End If
+
+	sCoordinates	= STRINGTrim(sCoordinates)
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = " "
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = ";"
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = "|"
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = Chr$(9)
+
+	For i = 1 To Ubound(arrSeparators)
+		If InStr(1, sCoordinates, arrSeparators(i)) > 0 Then
+			nSeparator = i
+			Exit For
+		End If
+	Next
+
+	If nSeparator = 0 Then
+		Note "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
+		Dialog Preserve
+		Exit Sub
+	End If
+	nNumParts = STRINGSplit(sCoordinates, arrSeparators(nSeparator), arrParts())
+
+	If nNumParts < 2 Then
+		Note "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
+		Dialog Preserve
+		Exit Sub
+	End If
+	If arrParts(1) = "" Then
+		Note "No first coordinate element found in string: '" & sCoordinates & "'"
+		Dialog Preserve
+		Exit Sub
+	End If
+	If arrParts(1) = "" Then
+		Note "No second coordinate element found in string: '" & sCoordinates & "'"
+		Dialog Preserve
+		Exit Sub
+	End If
+
+	mnLatLongOrder		= ReadControlValue(CTRL_LST_LATLONG_ORDER)
+
+	If mnLatLongOrder = COORD_ORDER_LATLONG Then
+		mfCoordinateY = Val(arrParts(1))
+		mfCoordinateX = Val(arrParts(2))
+	Else
+		mfCoordinateX = Val(arrParts(1))
+		mfCoordinateY = Val(arrParts(2))
+	End If
+
+	mbUseZoom = ReadControlValue(CTRL_CHK_USE_ZOOM)
+
+	If mbUseZoom Then
+		sZoom			= ReadControlValue(CTRL_TXT_ZOOM)
+		If sZoom = "" Then
+			Note "Please enter a zoom larger than 0 into the zoom field"
+			Dialog Preserve
+			Exit Sub
+		End If
+		If Val(DeformatNumber$(sZoom)) <= 0 Then
+			Note "Please enter a zoom larger than 0 into the zoom field"
+			Dialog Preserve
+			Exit Sub
+		End If
+		Call DLGMTSSetZoom(Val(DeformatNumber$(sZoom)))
+	End If
+
+	mbUseMarkerSymbol	= ReadControlValue(CTRL_CHK_USE_MARKER)
+	msymMarker 		= ReadControlValue(CTRL_SYM_MARKER)
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_Handler_OKClicked")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSGetCoordinateX() As Float
+
+OnError GoTo ErrorOccured
+
+DLGMTSGetCoordinateX = mfCoordinateX
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetCoordinateX")
+	Call ERRShow()
+
+End Function
+'**********************************************************************************************''
+Function DLGMTSGetCoordinateY() As Float
+
+OnError GoTo ErrorOccured
+
+DLGMTSGetCoordinateY = mfCoordinateY
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetCoordinateY")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSGetZoom() As Float
+
+OnError GoTo ErrorOccured
+
+DLGMTSGetZoom = mfZoom
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetZoom")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+Sub DLGMTSSetZoom(ByVal fValue As Float)
+
+OnError GoTo ErrorOccured
+
+	mfZoom = fValue
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetZoom")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Sub DLGMTSSetUseZoom(ByVal bValue As Logical)
+
+OnError GoTo ErrorOccured
+
+	mbUseZoom = bValue
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetUseZoom")
+
+End Sub
+'**********************************************************************************************''
+Function DLGMTSUseZoom() As Logical
+
+OnError GoTo ErrorOccured
+
+	DLGMTSUseZoom = mbUseZoom
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSUseZoom")
+
+End Function
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSGetDistanceUnits() As String
+
+OnError GoTo ErrorOccured
+
+	DLGMTSGetDistanceUnits = msDistanceUnits
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetDistanceUnits")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+Sub DLGMTSSetDistanceUnits(ByVal sValue As String)
+
+OnError GoTo ErrorOccured
+
+	msDistanceUnits = sValue
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetDistanceUnits")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSUseMarkerSymbol() As Logical
+
+OnError GoTo ErrorOccured
+
+	DLGMTSUseMarkerSymbol = mbUseMarkerSymbol
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSUseMarkerSymbol")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+Sub DLGMTSSetUseMarkerSymbol(ByVal bValue As Logical)
+
+OnError GoTo ErrorOccured
+
+	mbUseMarkerSymbol = bValue
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetUseMarkerSymbol")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSGetMarkerSymbol() As Symbol
+
+OnError GoTo ErrorOccured
+
+	DLGMTSGetMarkerSymbol = msymMarker
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetMarkerSymbol")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+Sub DLGMTSSetMarkerSymbol(ByVal symValue As Symbol)
+
+OnError GoTo ErrorOccured
+
+	msymMarker = symValue
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetMarkerSymbol")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+' Property
+'**********************************************************************************************''
+Sub DLGMTSSetLatLongOrder(ByVal nValue As Integer)
+
+OnError GoTo ErrorOccured
+
+	mnLatLongOrder = sValue
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSSetLatLongOrder")
+
+End Sub
+'**********************************************************************************************''
+Function DLGMTSGetLatLongOrder() As Integer
+
+OnError GoTo ErrorOccured
+
+	If mnLatLongOrder = 0 Then
+		mnLatLongOrder = COORD_ORDER_LATLONG
+	End If
+	DLGMTSGetLatLongOrder = mnLatLongOrder
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetLatLongOrder")
+
+End Function

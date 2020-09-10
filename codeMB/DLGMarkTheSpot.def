@@ -1,0 +1,21 @@
+Define	COORD_ORDER_LATLONG		1
+Define	COORD_ORDER_LONGLAT		2
+
+Declare Function DLGMarkTheSpot() As Logical
+
+Declare Function DLGMTSGetCoordinateX() As Float
+Declare Function DLGMTSGetCoordinateY() As Float
+Declare Function DLGMTSGetZoom() As Float
+Declare Sub DLGMTSSetZoom(ByVal fValue As Float)
+Declare Function DLGMTSUseZoom() As Logical
+Declare Sub DLGMTSSetUseZoom(ByVal bValue As Logical)
+Declare Function DLGMTSGetDistanceUnits() As String
+Declare Sub DLGMTSSetDistanceUnits(ByVal sValue As String)
+
+Declare Function DLGMTSUseMarkerSymbol() As Logical
+Declare Sub DLGMTSSetUseMarkerSymbol(ByVal bValue As Logical)
+Declare Function DLGMTSGetMarkerSymbol() As Symbol
+Declare Sub DLGMTSSetMarkerSymbol(ByVal symValue As Symbol)
+
+Declare Function DLGMTSGetLatLongOrder() As Integer
+Declare Sub DLGMTSSetLatLongOrder(ByVal nValue As Integer)

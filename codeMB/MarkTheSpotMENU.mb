@@ -1,0 +1,350 @@
+'*******************************************************************************
+'**   Created by Peter Horsbøll Møller, Pitney Bowes
+'** 	Program:
+'** 	Modul:
+'**
+'*******************************************************************************
+
+'-------------------------------------
+Include "Enums.def"
+Include "Icons.def"
+Include "MapBasic.def"
+Include "Menu.def"
+'**default constants...
+Include "Library\Defaults.def"
+Include "Library\MI_ICONS_X64.def"
+
+Define xProgram 		"Mark the Spot"
+Define xProgramMenu		"MarkTheSpot"
+Define xVersion 		"1.01"
+Define xYear			"2020"
+Define xAddToMenuBar	FALSE
+
+Define FILE_INI			GetFolderPath$(FOLDER_MI_PREFERENCE) & xProgram & ".ini"
+Define FILE_DBG			ApplicationDirectory$() & xProgram & ".dbg"
+'Define FILE_DLL			ApplicationDirectory$() & xProgram & ".dll"
+Define FILE_HLP			ApplicationDirectory$() & xProgram & ".pdf"
+Define FILE_PAD			GetFolderPath$(FOLDER_MI_PREFERENCE) & xProgram & ".btp"
+
+'-------------------------------------
+Include "Library\CONFIGFILELib.def"
+Include "Library\DEBUGLib.def"
+Include "Library\ERRORLib.def"
+Include "Library\ProgramInfo.def"
+Include "Library\RIBBONLib.def"
+Include "Library\STRINGLib.def"
+Include "Library\STYLELib.def"
+Include "Library\TABLELib.def"
+
+Include "DLGMarkTheSpot.def"
+
+'-----------------------------------------------------------------------------------------
+Declare Sub Main
+Declare Sub EndProgram
+Declare Sub EndHandler
+
+Declare Sub MENUMarkTheSpot
+Declare Sub MENUReadIniFile
+Declare Sub MENUWriteIniFile
+
+Declare Function AddIn_DefaultCommandText() As String
+Declare Sub AddIn_DefaultCommand
+
+'**********************************************************************************************''
+'**   Created by Peter Horsbøll Møller, Pitney Bowes
+'
+'**********************************************************************************************''
+Sub Main
+
+Dim	nCtrlIdx As Integer,
+	sTab, sGroup, sSplitbutton, sSplitbuttonGroup As String
+
+OnError GoTo ErrorOccured
+
+	'***Initializing ApplicationInfo
+	Call PRGISetApplicationName(xProgram)
+	Call PRGISetApplicationVersion(xVersion)
+	Call PRGISetApplicationCopyrightYear(xYear)
+	Call PRGISetApplicationHelpFile(FILE_HLP)
+
+	Call PRGISetApplicationDevelopedBy("Peter Horsbøll Møller")
+	Call PRGISetApplicationImageUri(MI_IMG_MAP_FINDADDRESS_16)
+
+	'***Enabling Debug if file exists
+	Call DEBUGEnableByFile(FILE_DBG)
+
+	'Group: MapNavigate
+	'Splitbutton: ZoomToDropDownButton
+	'SplitbuttonGroup: ZoomToSplitMenuGroup
+
+	sTab				= "TabMap"
+	sGroup			= "MapSelection"
+	sSplitbutton		= "MapFindSplitButton"
+	sSplitbuttonGroup	= "MapFindSplitButtonGroup"
+
+	nCtrlIdx = RBNSplitButtonGroupAddControl("cmdMarkTheSpot", "Mark the Spot", "", ControlType_Button, sTab, sGroup, sSplitbutton, sSplitbuttonGroup)
+	If nCtrlIdx > 0 Then
+		'Create & Set the button tooltip
+		Call RBNControlSetToolTipIdx(nCtrlIdx, "Mark the Spot of a Long/Lat coordinate", "", PRGIGetApplicationName())
+		'Set the button icon
+		Call RBNControlSetIconsIdx(nCtrlIdx, CONTROL_SIZE_LARGE, MI_IMG_MAP_FINDADDRESS_16, MI_IMG_MAP_FINDADDRESS_32)
+		'Set Custom MapBasic Handle to the button
+		Call RBNControlSetCustomMBXHandlerIdx(nCtrlIdx, "MENUMarkTheSpot")
+		Call RBNControlSetKeyGestureIdx(nCtrlIdx, "Ctrl+M")
+	End If
+
+	Call MENUReadIniFile
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "Main")
+	Call ERRShow()
+
+End Sub
+
+'****************************************
+'**   Created by Peter Horsbøll Møller, Pitney Bowes
+'**   Ending MapBasic application
+'****************************************
+Sub EndProgram
+
+OnError GoTo ErrorOccured
+
+	End Program
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "EndProgram")
+	Call ERRShow()
+
+End Sub
+
+'****************************************
+'**   Created by Peter Horsbøll Møller, Pitney Bowes
+'**   Ending MapBasic application
+'****************************************
+Sub EndHandler
+
+OnError GoTo ErrorOccured
+
+	Call MENUWriteIniFile
+
+	Call RBNEndHandler
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "EndProgram")
+	Call ERRShow()
+
+End Sub
+
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'
+'**********************************************************************************************''
+Sub AddIn_DefaultCommand
+
+OnError GoTo ErrorOccured
+
+	Call MENUMarkTheSpot
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "AddIn_DefaultCommand")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'
+'**********************************************************************************************''
+Function AddIn_DefaultCommandText() As String
+
+OnError GoTo ErrorOccured
+
+	AddIn_DefaultCommandText = "Mark the Spot of a Long/Lat coordinate"
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "AddIn_DefaultCommandText")
+	Call ERRShow()
+
+End Function
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub MENUMarkTheSpot
+
+Dim	oPoint As Object,
+	nMID As Integer
+
+OnError GoTo ErrorOccured
+
+	If NumWindows() = 0 Then
+		Note "Please open a map window before using this tool!"
+		Exit Sub
+	End If
+	nMID = FrontWindow()
+	If nMID = 0 Then
+		Note "Please open a map window before using this tool!"
+		Exit Sub
+	End If
+	If not WindowInfo(nMID, WIN_INFO_TYPE) = WIN_MAPPER Then
+		Note "Please make a map window the active window before using this tool!"
+		Exit Sub
+	End If
+
+	If DLGMarkTheSpot() Then
+		Call DebugPrint("Set Map Center (" & DLGMTSGetCoordinateX() & ", " & DLGMTSGetCoordinateY() & ") Zoom " & DLGMTSGetZoom() & " " & Chr$(34) & DLGMTSGetDistanceUnits() & Chr$(34))
+
+		Set Map Window nMID Redraw Off
+		If DLGMTSUseZoom() Then
+			Set Map
+				Window nMID
+				Zoom DLGMTSGetZoom() Units DLGMTSGetDistanceUnits()
+		End If
+
+		Set Map
+			Window nMID
+			Center (DLGMTSGetCoordinateX(), DLGMTSGetCoordinateY())
+
+		If DLGMTSUseMarkerSymbol() Then
+			Create Point
+				Into Variable oPoint
+				(DLGMTSGetCoordinateX(), DLGMTSGetCoordinateY())
+				Symbol DLGMTSGetMarkerSymbol()
+
+			Insert Into WindowInfo(nMID, WIN_INFO_TABLE)
+				(OBJ)
+				Values
+				(oPoint)
+		End If
+
+		Set Map Window nMID Redraw On
+	End If
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "MENUMarkTheSpot")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub MENUReadIniFile
+
+Dim	sValue As String
+
+OnError GoTo ErrorOccured
+
+	Call DLGMTSSetZoom(250)
+	Call DLGMTSSetUseMarkerSymbol(TRUE)
+	Call DLGMTSSetMarkerSymbol(MakeFontSymbol(51,16711935,24,"MapInfo Symbols",257,0))
+	Call DLGMTSSetLatLongOrder(COORD_ORDER_LATLONG)
+
+	Do Case GetPreference(0, 23)
+		Case 7	'Meters
+			Call DLGMTSSetDistanceUnits("m")
+		Case 1	'Kilometers
+			Call DLGMTSSetDistanceUnits("km")
+		Case 3	'Feet
+			Call DLGMTSSetDistanceUnits("ft")
+		Case 0	'Miles
+			Call DLGMTSSetDistanceUnits("mi")
+		Case 2	'Inches
+			Call DLGMTSSetDistanceUnits("in")
+		Case 30	'Links
+			Call DLGMTSSetDistanceUnits("li")
+		Case 8	'US Survey Feet
+			Call DLGMTSSetDistanceUnits("survey ft")
+		Case 4	'Yards
+			Call DLGMTSSetDistanceUnits("yd")
+		Case 32	'Rods
+			Call DLGMTSSetDistanceUnits("rd")
+		Case 31	'Chains
+			Call DLGMTSSetDistanceUnits("ch")
+		Case 9	'Nautical Miles
+			Call DLGMTSSetDistanceUnits("nmi")
+		Case 5	'Millimeters
+			Call DLGMTSSetDistanceUnits("mm")
+		Case 6	'Centimeters
+			Call DLGMTSSetDistanceUnits("cm")
+	End Case
+
+	If FileExists(FILE_INI) Then
+		sValue = CONFIGReadKey(FILE_INI, "MarkTheSpot", "USEZOOM")
+		If sValue = "1" Then
+			Call DLGMTSSetUseZoom(TRUE)
+		End If
+
+		sValue = CONFIGReadKey(FILE_INI, "MarkTheSpot", "ZOOM")
+		If sValue <> "" Then
+			Call DLGMTSSetZoom(Val(sValue))
+		End If
+
+		sValue = CONFIGReadKey(FILE_INI, "MarkTheSpot", "USEMARKER")
+		If sValue = "1" Then
+			Call DLGMTSSetUseMarkerSymbol(TRUE)
+		End If
+
+		sValue = CONFIGReadKey(FILE_INI, "MarkTheSpot", "MARKERSYMBOL")
+		If sValue <> "" Then
+			Call DLGMTSSetMarkerSymbol(STLText2Symbol(sValue))
+		End If
+
+		sValue = CONFIGReadKey(FILE_INI, "MarkTheSpot", "LATLONGORDER")
+		If sValue = "LONGLAT" Then
+			Call DLGMTSSetLatLongOrder(COORD_ORDER_LONGLAT)
+		Else
+			Call DLGMTSSetLatLongOrder(COORD_ORDER_LATLONG)
+		End If
+	End If
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "MENUReadIniFile")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Pitney Bowes
+'Parameters:
+'
+'**********************************************************************************************''
+Sub MENUWriteIniFile
+
+OnError GoTo ErrorOccured
+
+	Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "USEZOOM", STRINGLogicalToNumber(DLGMTSUseZoom()))
+	Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "ZOOM", DLGMTSGetZoom())
+	Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "USEMARKER", STRINGLogicalToNumber(DLGMTSUseMarkerSymbol()))
+	Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "MARKERSYMBOL", STLSymbol2Text(DLGMTSGetMarkerSymbol()))
+
+	If DLGMTSGetLatLongOrder() = COORD_ORDER_LONGLAT Then
+		Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "LATLONGORDER", "LONGLAT")
+	Else
+		Call CONFIGWriteKey(FILE_INI, "MarkTheSpot", "LATLONGORDER", "LATLONG")
+	End If
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "MENUWriteIniFile")
+	Call ERRShow()
+
+End Sub
