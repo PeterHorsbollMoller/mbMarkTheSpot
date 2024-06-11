@@ -7,6 +7,7 @@
 
 '-------------------------------------
 Include "MapBasic.def"
+Include "Enums.def"
 Include "Icons.def"
 Include "Menu.def"
 '**default constants...
@@ -15,25 +16,35 @@ Include "Library\Defaults.def"
 '-------------------------------------
 Include "Library\DEBUGLib.def"
 Include "Library\ERRORLib.def"
+Include "Library\RIBBONLib.def"
 Include "Library\STRINGLib.def"
+Include "Library\SYSTEMLib.def"
 Include "Library\TABLELib.def"
 
 Include "DLGMarkTheSpot.def"
 
 Declare Sub DLGMTS_Handler_OnLoad
 Declare Sub DLGMTS_Handler_OKClicked
+Declare Sub DLGMTS_CopyClicked
+Declare Sub DLGMTS_PasteClicked
+Declare Sub DLGMTS_CoordSysTypeClicked
 Declare Sub DLGMTS_Handler_UseZoomClicked
 Declare Sub DLGMTS_Handler_UseMarkerClicked
 
-Define	CTRL_TXT_COORDINATES	100
+Declare Function DLGMTSGetXYFromCoordinateString(	  ByVal sCoordinates As String	'The combined coordinate string
+										, arrParts() As String			'Will contain the two coordinates
+										) As String					'"" if ok, otherwise error string
+
+Define	CTRL_LBL_COORDINATES	100
+Define	CTRL_TXT_COORDINATES	110
 Define	CTRL_CHK_USE_MARKER		200
 Define	CTRL_SYM_MARKER		210
 Define	CTRL_CHK_USE_ZOOM		300
 Define	CTRL_TXT_ZOOM			310
-Define	CTRL_LST_LATLONG_ORDER	400
+Define	CTRL_LST_COORDSYS_TYPE	400
 
 Dim	msymMarker As Symbol,
-	mnLatLongOrder As Integer,
+	mnCoordSysType As Integer,
 	mbUseMarkerSymbol, mbUseZoom As Logical,
 	mfCoordinateX, mfCoordinateY, mfZoom As Float,
 	msDistanceUnits As String
@@ -46,28 +57,21 @@ Dim	msymMarker As Symbol,
 '**********************************************************************************************''
 Function DLGMarkTheSpot() As Logical
 
-Dim	sCoordinates As String
 
 OnError GoTo ErrorOccured
 
 DLGMarkTheSpot = FALSE
 
-	Set CoordSys Earth Projection 1, 104
-	If DLGMTSGetLatLongOrder() = COORD_ORDER_LATLONG Then
-		sCoordinates = MapperInfo(FrontWindow(), MAPPER_INFO_CENTERY) & " " & MapperInfo(FrontWindow(), MAPPER_INFO_CENTERX)
-	Else
-		sCoordinates = MapperInfo(FrontWindow(), MAPPER_INFO_CENTERX) & " " & MapperInfo(FrontWindow(), MAPPER_INFO_CENTERY)
-	End If
-
 	Dialog
 		Title "Mark the Spot"
 		Calling DLGMTS_Handler_OnLoad
 
-		Control StaticText		Position 5,5
-			Title "Enter Coordinate - Lat/Long WGS84"
+		Control StaticText		Position 5,5			ID CTRL_LBL_COORDINATES
+			Title "&Enter Coordinate - Lat/Long WGS84"
+			Width 220
 		Control EditText		Position 5,15			ID CTRL_TXT_COORDINATES
-			Width 200
-			Value sCoordinates
+			Width 178
+'			Value sCoordinates
 
 		Control CheckBox		Position 5,35			ID CTRL_CHK_USE_MARKER
 			Title "Symbol"
@@ -77,21 +81,35 @@ DLGMarkTheSpot = FALSE
 			Width 20	Height 20
 			Value DLGMTSGetMarkerSymbol()
 
-		Control RadioGroup		Position 50,35			ID CTRL_LST_LATLONG_ORDER
-			Title "Lat/Long;Long/Lat"
+		Control RadioGroup		Position 50,35			ID CTRL_LST_COORDSYS_TYPE
+			Title "Lat/Long;Long/Lat;Map Coordsys"
 			Value DLGMTSGetLatLongOrder()
+			Calling DLGMTS_CoordSysTypeClicked
 
-		Control CheckBox		Position 105,35			ID CTRL_CHK_USE_ZOOM
+		Control CheckBox		Position 120,35		ID CTRL_CHK_USE_ZOOM
 			Title "Zoom, " & DLGMTSGetDistanceUnits()
 			Calling DLGMTS_Handler_UseZoomClicked
 			Value DLGMTSUseZoom()
-		Control EditText		Position 105,47			ID CTRL_TXT_ZOOM
+		Control EditText		Position 120,47		ID CTRL_TXT_ZOOM
 			Width 50
 			Value FormatNumber$(DLGMTSGetZoom())
 
-		Control OKButton		Position 165,45
+		Control Button			Position 185,15
+			Title "&Copy"
+			Calling DLGMTS_CopyClicked
+			Width 40	Height 13
+		Control Button			Position 185,31
+			Title "&Paste"
+			Calling DLGMTS_PasteClicked
+			Width 40	Height 13
+
+		Control OKButton		Position 185,45
+			Title "Show"
 			Calling DLGMTS_Handler_OKClicked
-		Control CancelButton	Position 165,60
+			Width 40
+		Control CancelButton	Position 185,60
+			Title "Close"
+			Width 40
 
 	If not CommandInfo(CMD_INFO_DLG_OK) Then
 		Exit Function
@@ -116,6 +134,7 @@ Sub DLGMTS_Handler_OnLoad
 
 OnError GoTo ErrorOccured
 
+	Call DLGMTS_CoordSysTypeClicked
 	Call DLGMTS_Handler_UseZoomClicked
 	Call DLGMTS_Handler_UseMarkerClicked
 	Alter Control CTRL_TXT_COORDINATES Active
@@ -123,6 +142,119 @@ OnError GoTo ErrorOccured
 '-------------------------
 ErrorOccured:
 	Call ERRCreate(Err(), Error$(), "DLGMTS_Handler_OnLoad")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_CopyClicked
+
+Dim	sError, sCoordinates, arrParts() As String
+
+OnError GoTo ErrorOccured
+
+	sCoordinates	= ReadControlValue(CTRL_TXT_COORDINATES)
+	If sCoordinates = "" Then
+		Exit Sub
+	End If
+
+	sCoordinates	= STRINGTrim(sCoordinates)
+	sError = DLGMTSGetXYFromCoordinateString(sCoordinates, arrParts)
+	If sError <> "" Then
+		Note sError
+		Exit Sub
+	End If
+
+	Call SYSCopyTextToClipboard(DeformatNumber$(arrParts(1)) & " " & DeformatNumber$(arrParts(2)))
+	Call RBNNotificationShow("Mark the Spot", "Unformated Coordinates copied to clipboad: ( " & DeformatNumber$(arrParts(1)) & " | " & DeformatNumber$(arrParts(2)) &" )" , Notify_Info, 5000)
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_CopyClicked")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_PasteClicked
+
+Dim	sError, sCoordinates, arrParts() As String
+
+OnError GoTo ErrorOccured
+
+	sCoordinates	= SYSGetTextFromClipboard()
+	If sCoordinates = "" Then
+		Exit Sub
+	End If
+
+	sCoordinates	= STRINGTrim(sCoordinates)
+	sError = DLGMTSGetXYFromCoordinateString(sCoordinates, arrParts)
+	If sError <> "" Then
+		Note sError
+		Exit Sub
+	End If
+
+	arrParts(1)	= STRINGReplace(arrParts(1), ",", ".")
+	arrParts(2)	= STRINGReplace(arrParts(2), ",", ".")
+'	Print "DLGMTS_PasteClicked:" & arrParts(1) & " " & arrParts(2)
+	Alter Control CTRL_TXT_COORDINATES Value Format$(arrParts(1), ",#.000000") & " " & Format$(arrParts(2), ",#.000000")
+
+	Call RBNNotificationShow("Mark the Spot", "Coordinates pasted from clipboad: " & sCoordinates  , Notify_Info, 5000)
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_PasteClicked")
+	Call ERRShow()
+
+End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'
+'**********************************************************************************************''
+Sub DLGMTS_CoordSysTypeClicked
+
+Dim	fFirst, fSecond As Float,
+	nMID As Integer
+
+OnError GoTo ErrorOccured
+
+	nMID	= FrontWindow()
+	Do Case ReadControlValue(CTRL_LST_COORDSYS_TYPE)
+		Case COORD_ORDER_LATLONG
+			Alter Control CTRL_LBL_COORDINATES	Title "Enter Coordinate - Latitude/Longitude WGS84"
+			Set CoordSys Earth Projection 1, 104
+			fFirst 	= MapperInfo(nMID, MAPPER_INFO_CENTERY)
+			fSecond	= MapperInfo(nMID, MAPPER_INFO_CENTERX)
+		Case COORD_ORDER_LONGLAT
+			Alter Control CTRL_LBL_COORDINATES	Title "Enter Coordinate - Longitude/Latitude WGS84"
+			Set CoordSys Earth Projection 1, 104
+			fFirst 	= MapperInfo(nMID, MAPPER_INFO_CENTERX)
+			fSecond	= MapperInfo(nMID, MAPPER_INFO_CENTERY)
+		Case Else
+			Alter Control CTRL_LBL_COORDINATES	Title "Enter Coordinate - " & MapperInfo(nMID, MAPPER_INFO_COORDSYS_NAME)
+			Set CoordSys Window nMID
+			fFirst 	= MapperInfo(nMID, MAPPER_INFO_CENTERX)
+			fSecond	= MapperInfo(nMID, MAPPER_INFO_CENTERY)
+	End Case
+
+	Alter Control CTRL_TXT_COORDINATES	Value Format$(fFirst, ",#.000000") & " " & Format$(fSecond, ",#.000000")
+
+	Exit Sub
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTS_CoordSysTypeClicked")
 	Call ERRShow()
 
 End Sub
@@ -180,8 +312,7 @@ End Sub
 '**********************************************************************************************''
 Sub DLGMTS_Handler_OKClicked
 
-Dim	sZoom, sCoordinates, arrSeparators(), arrParts() As String,
-	i, nSeparator, nNumParts, nOrder As Integer
+Dim	sZoom, sCoordinates, sError, arrParts() As String
 
 OnError GoTo ErrorOccured
 
@@ -193,57 +324,21 @@ OnError GoTo ErrorOccured
 	End If
 
 	sCoordinates	= STRINGTrim(sCoordinates)
-	i = i + 1
-	Redim arrSeparators(i)
-	arrSeparators(i) = " "
-	i = i + 1
-	Redim arrSeparators(i)
-	arrSeparators(i) = ";"
-	i = i + 1
-	Redim arrSeparators(i)
-	arrSeparators(i) = "|"
-	i = i + 1
-	Redim arrSeparators(i)
-	arrSeparators(i) = Chr$(9)
-
-	For i = 1 To Ubound(arrSeparators)
-		If InStr(1, sCoordinates, arrSeparators(i)) > 0 Then
-			nSeparator = i
-			Exit For
-		End If
-	Next
-
-	If nSeparator = 0 Then
-		Note "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
-		Dialog Preserve
-		Exit Sub
-	End If
-	nNumParts = STRINGSplit(sCoordinates, arrSeparators(nSeparator), arrParts())
-
-	If nNumParts < 2 Then
-		Note "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
-		Dialog Preserve
-		Exit Sub
-	End If
-	If arrParts(1) = "" Then
-		Note "No first coordinate element found in string: '" & sCoordinates & "'"
-		Dialog Preserve
-		Exit Sub
-	End If
-	If arrParts(1) = "" Then
-		Note "No second coordinate element found in string: '" & sCoordinates & "'"
+	sError = DLGMTSGetXYFromCoordinateString(sCoordinates, arrParts)
+	If sError <> "" Then
+		Note sError
 		Dialog Preserve
 		Exit Sub
 	End If
 
-	mnLatLongOrder		= ReadControlValue(CTRL_LST_LATLONG_ORDER)
+	mnCoordSysType		= ReadControlValue(CTRL_LST_COORDSYS_TYPE)
 
-	If mnLatLongOrder = COORD_ORDER_LATLONG Then
-		mfCoordinateY = Val(arrParts(1))
-		mfCoordinateX = Val(arrParts(2))
+	If mnCoordSysType = COORD_ORDER_LATLONG Then
+		mfCoordinateX = Val(DeformatNumber$(arrParts(2)))
+		mfCoordinateY = Val(DeformatNumber$(arrParts(1)))
 	Else
-		mfCoordinateX = Val(arrParts(1))
-		mfCoordinateY = Val(arrParts(2))
+		mfCoordinateX = Val(DeformatNumber$(arrParts(1)))
+		mfCoordinateY = Val(DeformatNumber$(arrParts(2)))
 	End If
 
 	mbUseZoom = ReadControlValue(CTRL_CHK_USE_ZOOM)
@@ -273,6 +368,87 @@ ErrorOccured:
 	Call ERRShow()
 
 End Sub
+
+'**********************************************************************************************''
+'Created by Peter Horsbøll Møller, Precisely
+'Parameters:
+'	:
+'Return value:
+'
+'**********************************************************************************************''
+Function DLGMTSGetXYFromCoordinateString( ByVal sCoordinates As String	'The combined coordinate string
+								, arrParts() As String			'Will contain the two coordinates
+'								, ByVal bIncludeComma As Separator	'Allow comma as a possible separator between the two coordinates
+								) As String					'"" if ok, otherwise error string
+
+Dim	arrSeparators() As String,
+	i, nSeparator, nNumParts As Integer
+
+OnError GoTo ErrorOccured
+
+DLGMTSGetXYFromCoordinateString = ""
+
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = " "
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = ";"
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = "|"
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = Chr$(9)
+	i = i + 1
+	Redim arrSeparators(i)
+	arrSeparators(i) = ","
+
+	For i = 1 To Ubound(arrSeparators)
+		If InStr(1, sCoordinates, arrSeparators(i)) > 0 Then
+			nSeparator = i
+			Exit For
+		End If
+	Next
+
+	If nSeparator = 0 Then
+		DLGMTSGetXYFromCoordinateString	= "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
+		Exit Function
+	End If
+	nNumParts = STRINGSplit(sCoordinates, arrSeparators(nSeparator), arrParts())
+
+	If nNumParts < 2 Then
+		DLGMTSGetXYFromCoordinateString	= "Please separate the coordinates with one of these separators: ''Space', ';', '|' or 'TAB'"
+		Exit Function
+	End If
+	If arrParts(1) = "" Then
+		DLGMTSGetXYFromCoordinateString	= "No first coordinate element found in string: '" & sCoordinates & "'"
+		Exit Function
+	End If
+	If arrParts(2) = "" Then
+		DLGMTSGetXYFromCoordinateString	= "No second coordinate element found in string: '" & sCoordinates & "'"
+		Exit Function
+	End If
+
+	If nNumParts = 4 Then
+		arrParts(1) = arrParts(1) & "." & arrParts(2)
+		arrParts(2) = arrParts(3) & "." & arrParts(4)
+		Redim arrParts(2)
+'		Print "A1:" & arrParts(1)
+'		Print "A2:" & arrParts(2)
+		arrParts(1) = IIf(Right$(arrParts(1), 1) = ",", Left$(arrParts(1), Len(arrParts(1) - 1)), arrParts(1))
+		arrParts(2) = IIf(Right$(arrParts(2), 1) = ",", Left$(arrParts(2), Len(arrParts(2) - 1)), arrParts(2))
+'		Print "B1:" & arrParts(1)
+'		Print "B2:" & arrParts(2)
+	End If
+
+	Exit Function
+'-------------------------
+ErrorOccured:
+	Call ERRCreate(Err(), Error$(), "DLGMTSGetXYFromCoordinateString")
+	Call ERRShow()
+
+End Function
 
 '**********************************************************************************************''
 'Created by Peter Horsbøll Møller, Pitney Bowes
@@ -486,7 +662,7 @@ Sub DLGMTSSetLatLongOrder(ByVal nValue As Integer)
 
 OnError GoTo ErrorOccured
 
-	mnLatLongOrder = sValue
+	mnCoordSysType = nValue
 	Exit Sub
 '-------------------------
 ErrorOccured:
@@ -498,10 +674,10 @@ Function DLGMTSGetLatLongOrder() As Integer
 
 OnError GoTo ErrorOccured
 
-	If mnLatLongOrder = 0 Then
-		mnLatLongOrder = COORD_ORDER_LATLONG
+	If mnCoordSysType = 0 Then
+		mnCoordSysType = COORD_ORDER_LATLONG
 	End If
-	DLGMTSGetLatLongOrder = mnLatLongOrder
+	DLGMTSGetLatLongOrder = mnCoordSysType
 	Exit Function
 '-------------------------
 ErrorOccured:

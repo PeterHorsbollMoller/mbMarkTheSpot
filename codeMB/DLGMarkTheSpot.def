@@ -1,5 +1,6 @@
 Define	COORD_ORDER_LATLONG		1
 Define	COORD_ORDER_LONGLAT		2
+Define	COORD_MAP_WINDOW		3
 
 Declare Function DLGMarkTheSpot() As Logical
 

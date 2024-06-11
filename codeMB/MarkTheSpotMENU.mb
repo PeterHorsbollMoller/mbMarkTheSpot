@@ -16,8 +16,8 @@ Include "Library\MI_ICONS_X64.def"
 
 Define xProgram 		"Mark the Spot"
 Define xProgramMenu		"MarkTheSpot"
-Define xVersion 		"1.01"
-Define xYear			"2020"
+Define xVersion 		"1.10"
+Define xYear			"2024"
 Define xAddToMenuBar	FALSE
 
 Define FILE_INI			GetFolderPath$(FOLDER_MI_PREFERENCE) & xProgram & ".ini"
